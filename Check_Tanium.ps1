@@ -18,7 +18,7 @@ if (-not $serviceName) {
 
 # Check if Tanium client service exists
 Write-Host "Checking Tanium client service status..."
-$service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+$service = Get-Service -Name $Write-Host $serviceName.Name -ErrorAction SilentlyContinue
 if (-not $service) {
     Write-Host "Tanium client service not found. Please install the Tanium client."
     exit
