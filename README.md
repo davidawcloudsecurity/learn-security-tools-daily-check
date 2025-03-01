@@ -67,7 +67,6 @@ for ($i = 0; $i -lt $lines.Count - 1; $i++) {
 }
 
 # Check network connectivity to the Tanium server
-$port = 17472  # Default Tanium port
 Write-Host "Testing network connectivity to $serverName on port $port..."
 $connectionTest = Test-NetConnection -ComputerName $serverName -Port $port
 if (-not $connectionTest.TcpTestSucceeded) {
