@@ -53,21 +53,21 @@ if (-not $qualysPid) {
 }
 Write-Host "Qualys service is running with PID: $qualysPid" -ForegroundColor Green
 
-# Step 2: Use netstat to find connections and check for SYN_SENT (Qualys typically uses port 443)
-Write-Host "Checking for SYN_SENT connections..." -ForegroundColor Cyan
+# Step 2: Use netstat to find connections and check for ESTABLISHED (Qualys typically uses port 443)
+Write-Host "Checking for ESTABLISHED connections..." -ForegroundColor Cyan
 $netstatOutput = netstat -anob | Out-String
 $lines = $netstatOutput -split "`n"
 
 # Create a table format for display
-$synSentConnections = @()
+$establishedConnections = @()
 
-# Search for SYN_SENT connections associated with any process
+# Search for ESTABLISHED connections associated with any process
 for ($i = 0; $i -lt $lines.Count - 1; $i++) {
     $currentLine = $lines[$i].Trim()
     $nextLine = $lines[$i + 1].Trim()
     
-    # Check if the current line has TCP and SYN_SENT
-    if ($currentLine -match "^\s*TCP\s+([\d\.]+):(\d+)\s+([\d\.]+):(\d+)\s+SYN_SENT") {
+    # Check if the current line has TCP and ESTABLISHED
+    if ($currentLine -match "^\s*TCP\s+([\d\.]+):(\d+)\s+([\d\.]+):(\d+)\s+ESTABLISHED") {
         $localIp = $matches[1]
         $localPort = $matches[2]
         $remoteIp = $matches[3]
@@ -84,30 +84,30 @@ for ($i = 0; $i -lt $lines.Count - 1; $i++) {
             Protocol = "TCP"
             LocalAddress = "$localIp`:$localPort"
             RemoteAddress = "$remoteIp`:$remotePort"
-            State = "SYN_SENT"
+            State = "ESTABLISHED"
             Process = $processName
         }
         
-        $synSentConnections += $connectionInfo
+        $establishedConnections += $connectionInfo
     }
 }
 
 # Display the results in a table format
-if ($synSentConnections.Count -gt 0) {
-    Write-Host "Found $($synSentConnections.Count) SYN_SENT connections:" -ForegroundColor Yellow
-    $synSentConnections | Format-Table -AutoSize
+if ($establishedConnections.Count -gt 0) {
+    Write-Host "Found $($establishedConnections.Count) ESTABLISHED connections:" -ForegroundColor Yellow
+    $establishedConnections | Format-Table -AutoSize | findstr -i qual
     
-    # Check specifically for QualysAgent.exe with SYN_SENT to port 443 (default Qualys port)
-    $qualysSynSent = $synSentConnections | Where-Object { 
+    # Check specifically for QualysAgent.exe with ESTABLISHED to port 443 (default Qualys port)
+    $qualysEstablished = $establishedConnections | Where-Object { 
         $_.Process -eq "QualysAgent.exe" -and $_.RemoteAddress -match ":443$" 
     }
     
-    if ($qualysSynSent) {
-        Write-Host "ALERT: Qualys Agent is attempting to connect to remote servers but connections are in SYN_SENT state." -ForegroundColor Red
-        Write-Host "This may indicate network connectivity issues or firewall blocking." -ForegroundColor Yellow
+    if ($qualysEstablished) {
+        Write-Host "ALERT: Qualys Agent has established a connection to remote servers on port 443." -ForegroundColor Red
+        Write-Host "This means the Qualys Agent is successfully connected." -ForegroundColor Yellow
     }
 } else {
-    Write-Host "No SYN_SENT connections detected." -ForegroundColor Green
+    Write-Host "No ESTABLISHED connections detected." -ForegroundColor Green
 }
 
 # Check Qualys status and logs if needed
