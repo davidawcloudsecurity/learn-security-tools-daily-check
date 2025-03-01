@@ -8,9 +8,11 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
+$serviceName = "Tanium Client"
+
 # Check if Tanium client service exists
 Write-Host "Checking Tanium client service status..."
-$service = Get-Service -Name "Tanium Client" -ErrorAction SilentlyContinue
+$service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if (-not $service) {
     Write-Host "Tanium client service not found. Please install the Tanium client."
     exit
@@ -19,7 +21,7 @@ if (-not $service) {
 # Check if the service is running
 if ($service.Status -ne "Running") {
     Write-Host "Tanium client service is not running. Attempting to start..."
-    Start-Service -Name $service
+    Start-Service -Name $serviceName
     Start-Sleep -Seconds 5  # Wait for the service to start
     $service.Refresh()
     if ($service.Status -ne "Running") {
@@ -68,7 +70,7 @@ for ($i = 0; $i -lt $lines.Count - 1; $i++) {
 
 # Check network connectivity to the Tanium server
 Write-Host "Testing network connectivity to $serverName on port $port..."
-$connectionTest = Test-NetConnection -ComputerName $serverName -Port $port
+$connectionTest = Test-NetConnection localhost -Port $port
 if (-not $connectionTest.TcpTestSucceeded) {
     Write-Host "Cannot connect to Tanium server $serverName on port $port. Check network settings or firewall."
     exit
@@ -111,6 +113,5 @@ if ($service -and $service.Status -eq "Running") {
         Write-Host "Log file 'sensor-history0.txt' not found in $logDir or its subdirectories."
     }
 }
-
 ```
 
