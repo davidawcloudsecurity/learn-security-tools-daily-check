@@ -4,7 +4,15 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-$serviceName = "Tanium Client"
+Write-Host "Searching for a tanium-related service..."
+$serviceName = Get-Service | Where-Object { $_.Name -match "tanium" -or $_.DisplayName -match "tanium" } | Select-Object -First 1
+
+if (-not $serviceName) {
+    Write-Host "No tanium-related service found. Please ensure the Splunk Universal Forwarder is installed."
+    exit
+}
+
+$serviceName = $serviceName.Name
 $logFile = "sensor-history0.txt"
 $serverName = "localhost"  # Define serverName (adjust as needed)
 
