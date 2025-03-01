@@ -5,6 +5,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 $serviceName = "Tanium Client"
+$logfile = "sensor-history0.txt"
 
 # Check if Tanium client service exists
 Write-Host "Checking Tanium client service status..."
@@ -31,7 +32,7 @@ if ($service.Status -ne "Running") {
 }
 
 # Step 1: Get the Tanium Client service's Process ID (PID)
-$taniumService = Get-CimInstance -ClassName Win32_Service -Filter "Name='Tanium Client'" -ErrorAction SilentlyContinue
+$taniumService = Get-CimInstance -ClassName Win32_Service -Filter "Name='$serviceName'" -ErrorAction SilentlyContinue
 if (-not $taniumService) {
     Write-Host "Tanium Client service not found."
     exit 1
