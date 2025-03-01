@@ -5,7 +5,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 $serviceName = "Tanium Client"
-$logfile = "sensor-history0.txt"
+$logFile = "sensor-history0.txt"
+$serverName = "localhost"  # Define serverName (adjust as needed)
 
 # Check if Tanium client service exists
 Write-Host "Checking Tanium client service status..."
@@ -67,7 +68,7 @@ for ($i = 0; $i -lt $lines.Count - 1; $i++) {
 
 # Check network connectivity to the Tanium server
 Write-Host "Testing network connectivity to $serverName on port $port..."
-$connectionTest = Test-NetConnection localhost -Port $port
+$connectionTest = Test-NetConnection $serverName -Port $port
 if (-not $connectionTest.TcpTestSucceeded) {
     Write-Host "Cannot connect to Tanium server $serverName on port $port. Check network settings or firewall."
     exit
@@ -101,12 +102,12 @@ if ($service -and $service.Status -eq "Running") {
     }
 
     # Search for the sensor-history0.txt log file in the specified directory and its subdirectories
-    $logFilePath = Get-ChildItem -Path $logDir -Recurse -Filter "sensor-history0.txt" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $logFilePath = Get-ChildItem -Path $logDir -Recurse -Filter $logFile -ErrorAction SilentlyContinue | Select-Object -First 1
 
     if ($logFilePath) {
         Write-Host "Displaying the last 20 lines of the log file $($logFilePath.FullName):"
         Get-Content -Path $logFilePath.FullName -Tail 20
     } else {
-        Write-Host "Log file 'sensor-history0.txt' not found in $logDir or its subdirectories."
+        Write-Host "Log file $logFile not found in $logDir or its subdirectories."
     }
 }
