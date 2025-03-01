@@ -22,7 +22,7 @@ if (-not $service) {
 if ($service.Status -ne "Running") {
     Write-Host "Tanium client service is not running. Attempting to start..."
     Start-Service -Name $serviceName
-    Start-Sleep -Seconds 5  # Wait for the service to start
+    Start-Sleep -Seconds 15  # Wait for the service to start
     $service.Refresh()
     if ($service.Status -ne "Running") {
         Write-Host "Failed to start Tanium client service."
