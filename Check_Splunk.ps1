@@ -4,33 +4,33 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-# Check if Splunk Universal Forwarder service exists
+Write-Host "Searching for a Splunk-related service..."
+$serviceName = Get-Service | Where-Object { $_.Name -match "splunk" -or $_.DisplayName -match "splunk" } | Select-Object -First 1
+
+if (-not $serviceName) {
+    Write-Host "No Splunk-related service found. Please ensure the Splunk Universal Forwarder is installed."
+    exit
+}
+
+$serviceName = $serviceName.Name
+$logFile = "splunkd.log"  # Common Splunk log file name
+$serverName = "localhost"  # Define serverName (adjust as needed)
+
+# Check if Splunk service exists
 Write-Host "Checking Splunk service status..."
-$serviceInfo = Get-CimInstance -ClassName Win32_Service -Filter "Name='SplunkForwarder'"
-if (-not $serviceInfo) {
-    Write-Host "Splunk service not found. Please ensure the Splunk Universal Forwarder is installed."
+$service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if (-not $service) {
+    Write-Host "Splunk service not found. Please install the Splunk Universal Forwarder."
     exit
 }
 
-# Extract the installation directory dynamically from the service executable path
-$exePath = ($serviceInfo.PathName -split ' ', 2)[0].Trim('"')
-$installDir = Split-Path -Parent $exePath
-Write-Host "Splunk installation directory: $installDir"
-
-# Verify the executable exists
-$splunkExe = Join-Path $installDir "bin\splunk.exe"
-if (-not (Test-Path $splunkExe)) {
-    Write-Host "splunk.exe not found at $splunkExe. Cannot proceed."
-    exit
-}
-
-# Check if the service is running and start it if necessary
-if ($serviceInfo.State -ne "Running") {
+# Check if the service is running
+if ($service.Status -ne "Running") {
     Write-Host "Splunk service is not running. Attempting to start..."
-    Start-Service -Name "SplunkForwarder"
-    Start-Sleep -Seconds 5
-    $serviceInfo = Get-CimInstance -ClassName Win32_Service -Filter "Name='SplunkForwarder'"
-    if ($serviceInfo.State -ne "Running") {
+    Start-Service -Name $serviceName
+    Start-Sleep -Seconds 15  # Wait for the service to start
+    $service.Refresh()
+    if ($service.Status -ne "Running") {
         Write-Host "Failed to start Splunk service."
         exit
     } else {
@@ -40,59 +40,81 @@ if ($serviceInfo.State -ne "Running") {
     Write-Host "Splunk service is running."
 }
 
-# Check Splunk client connection status
-Write-Host "Checking Splunk client connection status..."
-$statusOutput = & $splunkExe list forward-server
+# Step 1: Get the Splunk service's Process ID (PID)
+$splunkService = Get-CimInstance -ClassName Win32_Service -Filter "Name='$serviceName'" -ErrorAction SilentlyContinue
+if (-not $splunkService) {
+    Write-Host "Splunk service not found."
+    exit 1
+}
+$splunkPid = $splunkService.ProcessId
+if (-not $splunkPid) {
+    Write-Host "Splunk service is not running."
+    exit 1
+}
+Write-Host "Splunk service is running with PID: $splunkPid"
 
-# Check if "Active forwards: None" is in the output
-if ($statusOutput -match "Active forwards:\s*None") {
-    Write-Host "Splunk client is not connected."
+# Step 2: Use netstat to find connections and check for SYN_SENT on port 9997
+$netstatOutput = netstat -anob | Out-String
+$lines = $netstatOutput -split "`n"
 
-    # Extract configured forward servers
-    $configuredServers = @()
-    foreach ($line in $statusOutput -split "`r`n") {
-        if ($line -match "^\s+\w+:\d+$") {
-            $server, $port = $line.Trim() -split ":"
-            $configuredServers += [PSCustomObject]@{Server=$server; Port=$port}
+# Search for SYN_SENT connections on port 9997 associated with Splunk processes
+$synSentFound = $false
+for ($i = 0; $i -lt $lines.Count - 1; $i++) {
+    $currentLine = $lines[$i].Trim()
+    $nextLine = $lines[$i + 1].Trim()
+    
+    # Check if the next line contains a Splunk-related process
+    if ($nextLine -match "\[splunkd\.exe\]") {
+        # Parse the current line for TCP, SYN_SENT state, and port 9997
+        if ($currentLine -match "^\s*TCP\s+([\d\.]+):(\d+)\s+([\d\.]+):9997\s+SYN_SENT") {
+            $localPort = $matches[2]
+            $remoteIp = $matches[3]
+            $synSentFound = $true
+            Write-Host "Found SYN_SENT connection from local port $localPort to $remoteIp:9997 for Splunk process."
+            break
         }
     }
+}
 
-    # Test network connectivity to each configured server
-    foreach ($server in $configuredServers) {
-        Write-Host "Testing connectivity to $($server.Server):$($server.Port)..."
-        $connectionTest = Test-NetConnection -ComputerName $server.Server -Port $server.Port
-        if (-not $connectionTest.TcpTestSucceeded) {
-            Write-Host "Cannot connect to $($server.Server):$($server.Port). Check network settings or firewall."
-        } else {
-            Write-Host "Connectivity to $($server.Server):$($server.Port) is successful."
-        }
-    }
+# Evaluate SYN_SENT status
+if ($synSentFound) {
+    Write-Host "SYN_SENT detected on port 9997. This may indicate a connectivity issue to the Splunk server. Check network or server status."
+    # Optionally exit or take further action here
+} else {
+    Write-Host "No SYN_SENT detected on port 9997. Splunk appears to be functioning normally for outbound connections."
+}
 
-    # Attempt to restart the service
-    Write-Host "Attempting to restart Splunk service..."
-    Restart-Service -Name "SplunkForwarder"
+# Check Splunk status
+$logDir = Get-ChildItem -Path $logDir -Recurse -Filter $logFile -ErrorAction SilentlyContinue | Select-Object -First 1
+
+# Check if the service is running
+$service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+
+if ($service -and $service.Status -eq "Running") {
+    Write-Host "Splunk service is running. No need to show logs."
+} else {
+    Write-Host "Splunk service is not running. Attempting to start service..."
+    Start-Service -Name $serviceName -ErrorAction Continue
+
+    # Wait for the service to stabilize
     Start-Sleep -Seconds 10
 
-    # Check connection status again
-    $statusOutput = & $splunkExe list forward-server
-    if ($statusOutput -match "Active forwards:\s*None") {
-        Write-Host "Splunk client still not connected after restart."
-        # Display the last 20 lines of the latest log file for troubleshooting
-        $logDir = Join-Path $installDir "var\log\splunk"
-        if (Test-Path $logDir) {
-            $latestLog = Get-ChildItem -Path $logDir -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if ($latestLog) {
-                Write-Host "Last 20 lines of the latest log file ($($latestLog.FullName)):"
-                Get-Content -Path $latestLog.FullName -Tail 20
-            } else {
-                Write-Host "No log files found in $logDir."
-            }
-        } else {
-            Write-Host "Log directory $logDir does not exist."
-        }
+    # Recheck the service status
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($service.Status -eq "Running") {
+        Write-Host "Splunk service is now running."
     } else {
-        Write-Host "Splunk client is now connected."
+        Write-Host "Splunk service failed to start."
+        exit 1  # Exit the script if the service could not be started
     }
-} else {
-    Write-Host "Splunk client is connected."
+
+    # Search for the splunkd.log file in the specified directory
+    $logFilePath = Get-ChildItem -Path $logDir -Recurse -Filter $logFile -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($logFilePath) {
+        Write-Host "Displaying the last 20 lines of the log file $($logFilePath.FullName):"
+        Get-Content -Path $logFilePath.FullName -Tail 20
+    } else {
+        Write-Host "Log file $logFile not found in $logDir or its subdirectories."
+    }
 }
