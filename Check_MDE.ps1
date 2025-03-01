@@ -86,7 +86,7 @@ for ($i = 0; $i -lt $lines.Count - 1; $i++) {
 # Display the results in a table format
 if ($establishedConnections.Count -gt 0) {
     Write-Host "Found $($establishedConnections.Count) ESTABLISHED connections:" -ForegroundColor Yellow
-    $establishedConnections | Format-Table -AutoSize
+    $establishedConnections | Format-Table -AutoSize | findstr -i sense
     
     # Check specifically for Sense.exe (or MsSense.exe) with ESTABLISHED to port 443
     $mdeEstablished = $establishedConnections | Where-Object { 
