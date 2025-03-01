@@ -32,14 +32,38 @@ if ($service.Status -ne "Running") {
     Write-Host "Tanium client service is running."
 }
 
-# Get Tanium server name from registry
-Write-Host "Retrieving Tanium server name from registry..."
-try {
-    $serverName = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Tanium\Tanium Client" -Name "ServerName").ServerName
-    Write-Host "Tanium server name: $serverName"
-} catch {
-    Write-Host "Cannot find Tanium server name in registry. The client might not be configured properly."
-    exit
+# Step 1: Get the Tanium Client service's Process ID (PID)
+$taniumService = Get-CimInstance -ClassName Win32_Service -Filter "Name='Tanium Client'" -ErrorAction SilentlyContinue
+if (-not $taniumService) {
+    Write-Host "Tanium Client service not found."
+    exit 1
+}
+$taniumPid = $taniumService.ProcessId
+if (-not $taniumPid) {
+    Write-Host "Tanium Client service is not running."
+    exit 1
+}
+Write-Host "Tanium Client service is running with PID: $taniumPid"
+
+# Step 2: Use netstat to find the port associated with the Tanium Client process
+$netstatOutput = netstat -anob | Out-String
+$lines = $netstatOutput -split "`n"
+
+# Search for LISTENING connections associated with TaniumClient.exe specifically
+$port = $null
+for ($i = 0; $i -lt $lines.Count - 1; $i++) {
+    $currentLine = $lines[$i].Trim()
+    $nextLine = $lines[$i + 1].Trim()
+    
+    # Check if the next line contains [TaniumClient.exe]
+    if ($nextLine -match "\[TaniumClient\.exe\]") {
+        # Parse the current line for TCP, LISTENING state, and port information
+        if ($currentLine -match "^\s*TCP\s+([\d\.]+):(\d+)\s+[\d\.]+:\d*\s+LISTENING") {
+            $port = $matches[2]
+            Write-Host "Found Tanium Client listening on port $port"
+            break
+        }
+    }
 }
 
 # Check network connectivity to the Tanium server
