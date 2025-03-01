@@ -111,7 +111,7 @@ if ($synSentConnections.Count -gt 0) {
 }
 
 # Check Splunk status and logs if needed
-$logDir = "C:\Program Files\SplunkUniversalForwarder\var\log\splunk"  # Default log directory, adjust if needed
+$logDir = "C:\"  # Default log directory, adjust if needed
 
 # Check if the service is running
 $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
