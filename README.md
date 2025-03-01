@@ -77,30 +77,40 @@ if (-not $connectionTest.TcpTestSucceeded) {
 }
 
 # Check client status (assuming TaniumClient.exe status command exists)
-$clientPath = "C:\Program Files\Tanium\Tanium Client\TaniumClient.exe"
-Write-Host "Checking Tanium client connection status..."
-$statusOutput = & $clientPath status
-if ($statusOutput -notmatch "Connected") {
-    Write-Host "Tanium client is not connected. Attempting to restart service..."
-    Restart-Service -Name "TaniumClient"
-    Start-Sleep -Seconds 10  # Wait for the service to restart
-    $statusOutput = & $clientPath status
-    if ($statusOutput -notmatch "Connected") {
-        Write-Host "Tanium client still not connected after restart."
-        # Display last 20 lines of the latest log file
-        $logDir = "C:\Program Files\Tanium\Tanium Client\Logs"
-        $latestLog = Get-ChildItem -Path $logDir -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($latestLog) {
-            Write-Host "Last 20 lines of the latest log file ($($latestLog.FullName)):"
-            Get-Content -Path $latestLog.FullName -Tail 20
-        } else {
-            Write-Host "No log files found in $logDir."
-        }
-    } else {
-        Write-Host "Tanium client is now connected."
-    }
+$serviceName = "Tanium Client"
+$logDir = "C:\"  # Root directory to start searching from (you can change this to a more specific path)
+
+# Check if the service is running
+$service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+
+if ($service -and $service.Status -eq "Running") {
+    Write-Host "Tanium Client service is running. No need to show logs."
 } else {
-    Write-Host "Tanium client is connected."
+    Write-Host "Tanium Client service is not running. Attempting to start service..."
+    Start-Service -Name $serviceName -ErrorAction Continue
+
+    # Wait for the service to stabilize
+    Start-Sleep -Seconds 10
+
+    # Recheck the service status
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($service.Status -eq "Running") {
+        Write-Host "Tanium Client service is now running."
+    } else {
+        Write-Host "Tanium Client service failed to start."
+        exit 1  # Exit the script if the service could not be started
+    }
+
+    # Search for the sensor-history0.txt log file in the specified directory and its subdirectories
+    $logFilePath = Get-ChildItem -Path $logDir -Recurse -Filter "sensor-history0.txt" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($logFilePath) {
+        Write-Host "Displaying the last 20 lines of the log file $($logFilePath.FullName):"
+        Get-Content -Path $logFilePath.FullName -Tail 20
+    } else {
+        Write-Host "Log file 'sensor-history0.txt' not found in $logDir or its subdirectories."
+    }
 }
+
 ```
 
